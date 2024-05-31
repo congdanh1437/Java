@@ -48,7 +48,7 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        detector = new Detector(getBaseContext(), Constants.MODEL_PATH, Constants.LABELS_PATH, this);
+        detector = new Detector(MainActivity.this, Constants.MODEL_PATH, Constants.LABELS_PATH, this);
         detector.setup(this);
 
         if(OpenCVLoader.initDebug()) {

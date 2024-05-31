@@ -1,9 +1,15 @@
 package com.example.graduation;
 
+import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.os.SystemClock;
+import android.util.Log;
+import android.widget.Toast;
 
 import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.Interpreter;
@@ -27,7 +33,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Detector {
+    private static final String TAG = "Detector";
 
+    private Activity activity;
     private Context context;
     private String modelPath;
     private String labelPath;
@@ -40,6 +48,7 @@ public class Detector {
     private int tensorHeight = 0;
     private int numChannel = 0;
     private int numElements = 0;
+    private boolean dialogShown = false;
 
     private final ImageProcessor imageProcessor = new ImageProcessor.Builder()
             .add(new NormalizeOp(INPUT_MEAN, INPUT_STANDARD_DEVIATION))
@@ -50,14 +59,15 @@ public class Detector {
     private int folderIndex;
     private String folderPath;
 
-    public Detector(Context context, String modelPath, String labelPath, DetectorListener detectorListener) {
-        this.context = context;
+    public Detector(Activity activity, String modelPath, String labelPath, DetectorListener detectorListener) {
+        this.activity = activity;
+        this.context = activity.getApplicationContext(); // Use application context to avoid memory leaks
         this.modelPath = modelPath;
         this.labelPath = labelPath;
         this.detectorListener = detectorListener;
 
         // Initialize SharedPreferences
-        sharedPreferences = context.getSharedPreferences("DetectorPrefs", Context.MODE_PRIVATE);
+        sharedPreferences = this.context.getSharedPreferences("DetectorPrefs", Context.MODE_PRIVATE);
         folderIndex = sharedPreferences.getInt("folderIndex", 0);
     }
 
@@ -194,7 +204,6 @@ public class Detector {
                 if (y1 < 0F || y1 > 1F) continue;
                 if (x2 < 0F || x2 > 1F) continue;
                 if (y2 < 0F || y2 > 1F) continue;
-
                 boundingBoxes.add(new BoundingBox(x1, y1, x2, y2, cx, cy, w, h, maxConf, maxIdx, clsName));
             }
         }
@@ -237,7 +246,7 @@ public class Detector {
         if (!folder.exists()) {
             folder.mkdirs();
         }
-        // Increment and save the folder index for next run
+        // Increment and save the folder index for the next run
         folderIndex++;
         SharedPreferences.Editor editor = sharedPreferences.edit();
         editor.putInt("folderIndex", folderIndex);
@@ -246,12 +255,25 @@ public class Detector {
 
     private void saveObjectImage(Bitmap bitmap) {
         File folder = new File(folderPath);
-        if (folder.listFiles() != null && folder.listFiles().length >= 30) {
+        File[] files = folder.listFiles();
+        int numImages = files != null ? files.length : 0;
+
+        if (numImages >= 30 && !dialogShown) {
+            Log.d(TAG, "saveObjectImage");
             // Stop saving images if the folder already has 30 images
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    dialogShown = true;
+                    Log.d(TAG, "Dialog");
+                    showConfirmationDialog();
+                }
+            });
             return;
         }
+
         try {
-            String fileName = "object_" + System.currentTimeMillis() + ".png";
+            String fileName = "object_" + numImages + ".png";
             File file = new File(folderPath, fileName);
             FileOutputStream fos = new FileOutputStream(file);
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
@@ -262,9 +284,45 @@ public class Detector {
         }
     }
 
+    private void runOnUiThread(Runnable action) {
+        activity.runOnUiThread(action);
+    }
+
+    private void showConfirmationDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        builder.setTitle("Limit Reached");
+        builder.setMessage("You have reached the limit of 30 saved images.");
+        builder.setPositiveButton("Confirm", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialogInterface, int i) {
+                // Show a confirmation toast
+                Toast.makeText(context, "Confirmed", Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton("Decline", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialogInterface, int i) {
+                // Do nothing or handle decline action
+                restartApp();
+            }
+        });
+        builder.show();
+    }
+
+    private void restartApp() {
+        Intent intent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+        if (intent != null) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+        }
+    }
+
     public interface DetectorListener {
         void onEmptyDetect();
+
         void onDetect(List<BoundingBox> boundingBoxes, long inferenceTime);
+
         void onObjectImageSaved(String fileName);
     }
 
