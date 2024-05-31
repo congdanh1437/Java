@@ -295,6 +295,7 @@ public class Detector {
             public void onClick(DialogInterface dialogInterface, int i) {
                 // Show a confirmation toast
                 Toast.makeText(context, "Confirmed", Toast.LENGTH_SHORT).show();
+                moveToNewClassWithBlankLayout();
             }
         });
         builder.setNegativeButton("Decline", new DialogInterface.OnClickListener() {
@@ -305,6 +306,11 @@ public class Detector {
             }
         });
         builder.show();
+    }
+    private void moveToNewClassWithBlankLayout() {
+        Intent intent = new Intent(context, ImageGalleryActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); // Add this flag
+        context.startActivity(intent);
     }
 
     private void restartApp() {
