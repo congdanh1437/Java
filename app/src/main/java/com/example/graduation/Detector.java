@@ -8,7 +8,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.os.SystemClock;
-import android.util.Log;
 import android.widget.Toast;
 
 import org.tensorflow.lite.DataType;
@@ -74,7 +73,7 @@ public class Detector {
     public void setup(Context context) {
         try {
             // Load the model file into a byte array
-            byte[] model = ModelLoader.loadModel(context, "best_float32.tflite");
+            byte[] model = ModelLoader.loadModel(context, Constants.MODEL_PATH);
 
             // Create a ByteBuffer from the model byte array
             ByteBuffer modelBuffer = ByteBuffer.allocateDirect(model.length)
@@ -254,22 +253,21 @@ public class Detector {
     }
 
     private void saveObjectImage(Bitmap bitmap) {
+        if (dialogShown) {
+            // If the dialog has been shown, don't save any more images
+            return;
+        }
+
         File folder = new File(folderPath);
         File[] files = folder.listFiles();
         int numImages = files != null ? files.length : 0;
 
-        if (numImages >= 30 && !dialogShown) {
-            Log.d(TAG, "saveObjectImage");
-            // Stop saving images if the folder already has 30 images
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    dialogShown = true;
-                    Log.d(TAG, "Dialog");
-                    showConfirmationDialog();
-                }
-            });
-            return;
+        if (numImages >= 30) {
+            // If the number of images is already 30 or more
+            dialogShown = true; // Set the flag to true to indicate that the dialog has been shown
+            // Show the confirmation dialog
+            runOnUiThread(this::showConfirmationDialog);
+            return; // Stop saving images
         }
 
         try {
