@@ -1,35 +1,35 @@
 package com.example.graduation;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
-import android.widget.GridView;
 import android.widget.ImageView;
+
+import com.bumptech.glide.Glide;
 
 import java.io.File;
 import java.util.List;
 
 public class ImageAdapter extends BaseAdapter {
 
-    private Context mContext;
-    private List<File> mImageFiles;
+    private final Context context;
+    private final List<File> imageFiles;
 
     public ImageAdapter(Context context, List<File> imageFiles) {
-        mContext = context;
-        mImageFiles = imageFiles;
+        this.context = context;
+        this.imageFiles = imageFiles;
     }
 
     @Override
     public int getCount() {
-        return mImageFiles.size();
+        return imageFiles.size();
     }
 
     @Override
     public Object getItem(int position) {
-        return mImageFiles.get(position);
+        return imageFiles.get(position);
     }
 
     @Override
@@ -39,20 +39,15 @@ public class ImageAdapter extends BaseAdapter {
 
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
-        ImageView imageView;
         if (convertView == null) {
-            imageView = new ImageView(mContext);
-            imageView.setLayoutParams(new GridView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            imageView.setPadding(8, 8, 8, 8);
-        } else {
-            imageView = (ImageView) convertView;
+            convertView = LayoutInflater.from(context).inflate(R.layout.grid_item_image, parent, false);
         }
 
-        File imageFile = mImageFiles.get(position);
-        Bitmap bitmap = BitmapFactory.decodeFile(imageFile.getAbsolutePath());
-        imageView.setImageBitmap(bitmap);
+        ImageView imageView = convertView.findViewById(R.id.image_view);
+        // Load the image into the ImageView using a library like Glide or Picasso
+        // Example with Glide:
+        Glide.with(context).load(imageFiles.get(position)).into(imageView);
 
-        return imageView;
+        return convertView;
     }
 }
