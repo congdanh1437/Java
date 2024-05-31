@@ -1,8 +1,9 @@
 package com.example.graduation;
 
+import android.content.Intent;
 import android.os.Bundle;
-import android.util.Log;
 import android.widget.GridView;
+import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
@@ -13,7 +14,6 @@ import java.util.List;
 
 public class ImageGalleryActivity extends AppCompatActivity {
 
-    private static final String TAG = "ImageGalleryActivity";
     private GridView gridView;
     private ImageAdapter imageAdapter;
     private List<File> imageFiles;
@@ -25,25 +25,21 @@ public class ImageGalleryActivity extends AppCompatActivity {
         setContentView(R.layout.activity_image_gallery);
 
         gridView = findViewById(R.id.grid_view);
+        gridView.setOnItemClickListener((parent, view, position, id) -> {
+            displaySelectedImage(imageFiles.get(position));
+        });
 
-        // Get the folder path
         String folderPath = getFolderPath();
-
-        // Get image files from the folder
         imageFiles = getImageFiles(folderPath);
 
-        // Set up the adapter
         imageAdapter = new ImageAdapter(this, imageFiles);
         gridView.setAdapter(imageAdapter);
     }
 
     private String getFolderPath() {
-        // Get the last index from SharedPreferences
         int folderIndex = getSharedPreferences("DetectorPrefs", MODE_PRIVATE).getInt("folderIndex", 0);
-        // Create the folder path
         folderIndex = folderIndex - 1;
-        Log.d(TAG, "getFolderPath: " + getFilesDir().getAbsolutePath() + "/object_" + folderIndex);
-        return getFilesDir().getAbsolutePath() + "/object_" + folderIndex ;
+        return getFilesDir().getAbsolutePath() + "/object_" + folderIndex;
     }
 
     private List<File> getImageFiles(String folderPath) {
@@ -52,12 +48,19 @@ public class ImageGalleryActivity extends AppCompatActivity {
         File[] files = folder.listFiles();
         if (files != null) {
             for (File file : files) {
-                // Check if it's an image file (you may need to refine this check based on your requirements)
                 if (file.isFile() && file.getName().toLowerCase().endsWith(".png")) {
                     imageFiles.add(file);
                 }
             }
         }
         return imageFiles;
+    }
+
+    private void displaySelectedImage(File imageFile) {
+        String fileName = imageFile.getName();
+        Toast.makeText(this, "Selected file: " + fileName, Toast.LENGTH_SHORT).show();
+        Intent intent = new Intent(this, ImageDetailsActivity.class);
+        intent.putExtra("image_file_path", imageFile.getAbsolutePath());
+        startActivity(intent);
     }
 }

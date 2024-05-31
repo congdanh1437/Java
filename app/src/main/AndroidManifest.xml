@@ -27,6 +27,7 @@
         <activity android:name=".ImageGalleryActivity">
             <!-- Add any intent filters or other configurations if needed -->
         </activity>
+        <activity android:name=".ImageDetailsActivity" />
     </application>
 
 </manifest>
