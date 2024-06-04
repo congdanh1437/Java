@@ -2,19 +2,22 @@ package com.example.graduation;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.Matrix;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.AspectRatio;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
-import androidx.camera.core.ImageProxy;
+import androidx.camera.core.ImageCapture;
+import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.core.app.ActivityCompat;
@@ -25,8 +28,11 @@ import com.google.common.util.concurrent.ListenableFuture;
 
 import org.opencv.android.OpenCVLoader;
 
-import java.nio.ByteBuffer;
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -36,11 +42,12 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
 
     private Preview preview;
     private ImageAnalysis imageAnalyzer;
+    private ImageCapture imageCapture;
     private Camera camera;
     private ProcessCameraProvider cameraProvider;
-    private Detector detector;
 
     private ExecutorService cameraExecutor;
+    private Detector detector;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,13 +55,11 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        detector = new Detector(MainActivity.this, Constants.MODEL_PATH, Constants.LABELS_PATH, this);
-        detector.setup(this);
-
-        if(OpenCVLoader.initDebug()) {
-            Log.d(TAG, "SUCESSS");
-        }else {Log.d(TAG, "FAIL");}
-
+        if (OpenCVLoader.initDebug()) {
+            Log.d(TAG, "OpenCV initialization successful");
+        } else {
+            Log.d(TAG, "OpenCV initialization failed");
+        }
 
         if (allPermissionsGranted()) {
             startCamera();
@@ -63,6 +68,13 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor();
+
+        // Initialize the detector
+        detector = new Detector(this, Constants.MODEL_PATH, Constants.LABELS_PATH, this);
+        detector.setup(getApplicationContext());
+
+        // Set up the listener for the take picture button
+        binding.takePictureButton.setOnClickListener(v -> takePicture());
     }
 
     private void startCamera() {
@@ -76,7 +88,6 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
             }
         }, ContextCompat.getMainExecutor(this));
     }
-
 
     private void bindCameraUseCases() {
         if (cameraProvider == null) {
@@ -101,48 +112,10 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build();
 
-        imageAnalyzer.setAnalyzer(cameraExecutor, imageProxy -> {
-            // Get the dimensions of the image
-            int width = imageProxy.getWidth();
-            int height = imageProxy.getHeight();
-
-            // Create a Bitmap with the same dimensions as the image
-            Bitmap bitmapBuffer = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-
-            // Copy pixel data from the buffer to the Bitmap
-            ImageProxy.PlaneProxy planeProxy = imageProxy.getPlanes()[0];
-            ByteBuffer buffer = planeProxy.getBuffer();
-            buffer.rewind();
-            bitmapBuffer.copyPixelsFromBuffer(buffer);
-
-            // Close the ImageProxy after using its data
-            imageProxy.close();
-
-            // Create a matrix to handle image rotation
-            Matrix matrix = new Matrix();
-            matrix.postRotate((float) imageProxy.getImageInfo().getRotationDegrees());
-
-            // If using the front camera, flip the image horizontally
-            if (isFrontCamera) {
-                matrix.postScale(
-                        -1f,
-                        1f,
-                        width / 2f,
-                        height / 2f
-                );
-            }
-
-            // Rotate and/or flip the Bitmap
-            Bitmap rotatedBitmap = Bitmap.createBitmap(
-                    bitmapBuffer, 0, 0, width, height,
-                    matrix, true
-            );
-
-            // Pass the rotated Bitmap to the detector for further processing
-            detector.detect(rotatedBitmap);
-        });
-
-
+        imageCapture = new ImageCapture.Builder()
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                .setTargetRotation(rotation)
+                .build();
 
         cameraProvider.unbindAll();
 
@@ -151,7 +124,8 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
                     this,
                     cameraSelector,
                     preview,
-                    imageAnalyzer
+                    imageAnalyzer,
+                    imageCapture
             );
 
             preview.setSurfaceProvider(binding.viewFinder.getSurfaceProvider());
@@ -159,6 +133,44 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
             Log.e(TAG, "Use case binding failed", exc);
         }
     }
+
+    private void takePicture() {
+        if (imageCapture == null) {
+            return;
+        }
+
+        File photoFile = new File(detector.getLatestFolderPath(), new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+                .format(new Date()) + ".png");
+
+        ImageCapture.OutputFileOptions outputOptions = new ImageCapture.OutputFileOptions.Builder(photoFile).build();
+
+        imageCapture.takePicture(outputOptions, ContextCompat.getMainExecutor(this), new ImageCapture.OnImageSavedCallback() {
+            @Override
+            public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
+                Uri savedUri = outputFileResults.getSavedUri() != null ? outputFileResults.getSavedUri() : Uri.fromFile(photoFile);
+                String msg = "Photo capture succeeded: " + savedUri;
+                Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_SHORT).show();
+                Log.d(TAG, msg);
+
+                // Process the captured image with the detector
+                processCapturedImage(photoFile);
+            }
+
+            @Override
+            public void onError(@NonNull ImageCaptureException exception) {
+                Log.e(TAG, "Photo capture failed: " + exception.getMessage(), exception);
+            }
+        });
+    }
+
+    private void processCapturedImage(File photoFile) {
+        // Pass the captured image file name and its parent folder to the detector for object detection and saving
+        String imageName = photoFile.getName();
+        File parentFolder = photoFile.getParentFile();
+        detector.detectAndSaveObjects(BitmapFactory.decodeFile(photoFile.getAbsolutePath()), imageName, parentFolder);
+    }
+
+
 
     private boolean allPermissionsGranted() {
         for (String permission : REQUIRED_PERMISSIONS) {
@@ -168,6 +180,7 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
         }
         return true;
     }
+
 
     private final ActivityResultLauncher<String[]> requestPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.RequestMultiplePermissions(), result -> {
@@ -179,8 +192,8 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        detector.clear();
         cameraExecutor.shutdown();
+        detector.clear();
     }
 
     @Override
@@ -195,28 +208,23 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
 
     @Override
     public void onEmptyDetect() {
-        runOnUiThread(() -> binding.overlay.clear());
+        runOnUiThread(() -> Toast.makeText(this, "No objects detected", Toast.LENGTH_SHORT).show());
     }
-
-
 
 
     @Override
     public void onDetect(List<BoundingBox> boundingBoxes, long inferenceTime) {
         runOnUiThread(() -> {
-            binding.inferenceTime.setText(inferenceTime + "ms");
-            binding.overlay.setResults(boundingBoxes);
-            binding.overlay.invalidate();
+            String message = "Detected " + boundingBoxes.size() + " objects in " + inferenceTime + " ms";
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
         });
-    }
-
-    @Override
-    public void onObjectImageSaved(String fileName) {
     }
 
     private static final String TAG = "Camera";
     private static final int REQUEST_CODE_PERMISSIONS = 10;
     private static final String[] REQUIRED_PERMISSIONS = new String[]{
-            Manifest.permission.CAMERA
+            Manifest.permission.CAMERA,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
     };
 }
+

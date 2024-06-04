@@ -26,10 +26,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".ImageGalleryActivity">
+        <activity android:name=".ImageDisplayActivity">
             <!-- Add any intent filters or other configurations if needed -->
         </activity>
-        <activity android:name=".ImageDetailsActivity" />
+
     </application>
 
 </manifest>

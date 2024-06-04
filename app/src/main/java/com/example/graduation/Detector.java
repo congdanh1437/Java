@@ -8,7 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.os.SystemClock;
-import android.widget.Toast;
+import android.util.Log;
 
 import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.Interpreter;
@@ -47,7 +47,6 @@ public class Detector {
     private int tensorHeight = 0;
     private int numChannel = 0;
     private int numElements = 0;
-    private boolean dialogShown = false;
 
     private final ImageProcessor imageProcessor = new ImageProcessor.Builder()
             .add(new NormalizeOp(INPUT_MEAN, INPUT_STANDARD_DEVIATION))
@@ -130,7 +129,11 @@ public class Detector {
         }
     }
 
-    public void detect(Bitmap frame) {
+    public String getLatestFolderPath() {
+        return folderPath;
+    }
+
+    public void detectAndSaveObjects(Bitmap frame, String imageName, File parentFolder) {
         if (interpreter == null || tensorWidth == 0 || tensorHeight == 0 || numChannel == 0 || numElements == 0) {
             return;
         }
@@ -150,17 +153,56 @@ public class Detector {
         List<BoundingBox> bestBoxes = bestBox(output.getFloatArray());
         inferenceTime = SystemClock.uptimeMillis() - inferenceTime;
 
-        if (bestBoxes == null) {
+        if (bestBoxes == null || bestBoxes.isEmpty()) {
             detectorListener.onEmptyDetect();
             return;
         }
 
-        for (BoundingBox box : bestBoxes) {
-            Bitmap objectBitmap = extractObject(frame, box);
-            saveObjectImage(objectBitmap);
+        List<Bitmap> objectBitmaps = new ArrayList<>();
+
+        // Create a new folder based on the captured image file name
+        String folderName = imageName.substring(0, imageName.lastIndexOf('.'));
+        File newFolder = new File(parentFolder, folderName);
+        if (!newFolder.exists()) {
+            newFolder.mkdirs();
         }
 
+        for (BoundingBox box : bestBoxes) {
+            Bitmap objectBitmap = extractObject(frame, box);
+            objectBitmaps.add(objectBitmap);
+        }
+
+        saveBitmapToFileWithDialog(frame, newFolder, objectBitmaps);
+
         detectorListener.onDetect(bestBoxes, inferenceTime);
+    }
+
+    private void saveBitmapToFileWithDialog(Bitmap bitmap, File folder, List<Bitmap> objectBitmaps) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        builder.setTitle("Save Objects");
+        builder.setMessage("Do you want to save all detected objects?");
+        builder.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                // Save all detected objects
+                for (int i = 0; i < objectBitmaps.size(); i++) {
+                    Bitmap objectBitmap = objectBitmaps.get(i);
+                    saveBitmapToFile(objectBitmap, folder, i + 1);
+                }
+
+                // Navigate to ImageDisplayActivity
+                Intent intent = new Intent(activity, ImageDisplayActivity.class);
+                intent.putExtra("folderPath", folder.getAbsolutePath());
+                activity.startActivity(intent);
+            }
+        });
+        builder.setNegativeButton("No", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                // Do nothing or handle decline action
+            }
+        });
+        builder.show();
     }
 
     private Bitmap extractObject(Bitmap frame, BoundingBox box) {
@@ -170,6 +212,19 @@ public class Detector {
         int bottom = (int) (box.y2 * frame.getHeight());
 
         return Bitmap.createBitmap(frame, left, top, right - left, bottom - top);
+    }
+
+    private void saveBitmapToFile(Bitmap bitmap, File folder, int index) {
+        String fileName = "object_" + index + ".png";
+        File file = new File(folder, fileName);
+        try {
+            FileOutputStream fos = new FileOutputStream(file);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+            fos.flush();
+            fos.close();
+        } catch (IOException e) {
+            Log.e(TAG, "Error saving bitmap to file: " + e.getMessage(), e);
+        }
     }
 
     private List<BoundingBox> bestBox(float[] array) {
@@ -252,82 +307,9 @@ public class Detector {
         editor.apply();
     }
 
-    private void saveObjectImage(Bitmap bitmap) {
-        if (dialogShown) {
-            // If the dialog has been shown, don't save any more images
-            return;
-        }
-
-        File folder = new File(folderPath);
-        File[] files = folder.listFiles();
-        int numImages = files != null ? files.length : 0;
-
-        if (numImages >= 30) {
-            // If the number of images is already 30 or more
-            dialogShown = true; // Set the flag to true to indicate that the dialog has been shown
-            // Show the confirmation dialog
-            runOnUiThread(this::showConfirmationDialog);
-            return; // Stop saving images
-        }
-
-        try {
-            String fileName = "object_" + numImages + ".png";
-            File file = new File(folderPath, fileName);
-            FileOutputStream fos = new FileOutputStream(file);
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
-            fos.close();
-            detectorListener.onObjectImageSaved(fileName);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void runOnUiThread(Runnable action) {
-        activity.runOnUiThread(action);
-    }
-
-    private void showConfirmationDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
-        builder.setTitle("Limit Reached");
-        builder.setMessage("You have reached the limit of 30 saved images.");
-        builder.setPositiveButton("Confirm", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialogInterface, int i) {
-                // Show a confirmation toast
-                Toast.makeText(context, "Confirmed", Toast.LENGTH_SHORT).show();
-                moveToNewClassWithBlankLayout();
-            }
-        });
-        builder.setNegativeButton("Decline", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialogInterface, int i) {
-                // Do nothing or handle decline action
-                restartApp();
-            }
-        });
-        builder.show();
-    }
-    private void moveToNewClassWithBlankLayout() {
-        Intent intent = new Intent(context, ImageGalleryActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); // Add this flag
-        context.startActivity(intent);
-    }
-
-    private void restartApp() {
-        Intent intent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
-        if (intent != null) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(intent);
-        }
-    }
-
     public interface DetectorListener {
         void onEmptyDetect();
-
         void onDetect(List<BoundingBox> boundingBoxes, long inferenceTime);
-
-        void onObjectImageSaved(String fileName);
     }
 
     private static final float INPUT_MEAN = 0f;
