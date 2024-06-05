@@ -11,12 +11,17 @@ import android.provider.MediaStore;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.machinezoo.sourceafis.FingerprintMatcher;
+import com.machinezoo.sourceafis.FingerprintTemplate;
+
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.Random;
@@ -28,6 +33,9 @@ public class ImageDisplayActivity extends AppCompatActivity {
     private ImageView imageViewSelected;
     private ImageView imageViewLower;
     private TextView textViewLower;
+
+    // Store the path of the previously selected image
+    private String selectedImagePath;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,6 +75,9 @@ public class ImageDisplayActivity extends AppCompatActivity {
             int randomIndex = new Random().nextInt(files.length);
             Bitmap bitmap = BitmapFactory.decodeFile(files[randomIndex].getAbsolutePath());
 
+            // Store the path of the selected image
+            selectedImagePath = files[randomIndex].getAbsolutePath();
+
             // Display the image in the upper ImageView
             imageViewSelected.setImageBitmap(bitmap);
 
@@ -79,6 +90,7 @@ public class ImageDisplayActivity extends AppCompatActivity {
         startActivityForResult(intent, PICK_IMAGE_REQUEST);
     }
 
+    // In your onActivityResult method
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -88,10 +100,52 @@ public class ImageDisplayActivity extends AppCompatActivity {
                 Bitmap bitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), imageUri);
                 imageViewLower.setImageBitmap(bitmap);
                 textViewLower.setVisibility(View.GONE); // Hide the TextView
+
+                // Perform fingerprint matching
+                if (selectedImagePath != null) {
+                    Bitmap selectedBitmap = BitmapFactory.decodeFile(selectedImagePath);
+                    boolean matchResult = matchFingerprints(selectedBitmap, bitmap);
+                    if (matchResult) {
+                        showToast("Fingerprints match!");
+                    } else {
+                        showToast("Fingerprints do not match!");
+                    }
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
+    }
+
+    private boolean matchFingerprints(Bitmap fingerprint1, Bitmap fingerprint2) {
+        // Convert Bitmap objects to FingerprintTemplate objects
+        FingerprintTemplate template1 = convertToTemplate(fingerprint1);
+        FingerprintTemplate template2 = convertToTemplate(fingerprint2);
+
+        // Perform fingerprint matching
+        FingerprintMatcher matcher = new FingerprintMatcher(template1);
+        double score = matcher.match(template2); // Get the similarity score
+        // Adjust this threshold based on your application requirements
+        Toast.makeText(this, "Score: " + score, Toast.LENGTH_SHORT).show();
+        return score > 80; // If the score is above a certain threshold, consider them as matching
+    }
+
+    private FingerprintTemplate convertToTemplate(Bitmap fingerprint) {
+        // Convert Bitmap to byte array
+        byte[] imageBytes = convertToByteArray(fingerprint);
+
+        // Create FingerprintTemplate from byte array
+        return new FingerprintTemplate().dpi(500).create(imageBytes);
+    }
+
+    private byte[] convertToByteArray(Bitmap bitmap) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+        return stream.toByteArray();
+    }
+
+    private void showToast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
     @Override
