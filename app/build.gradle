@@ -61,5 +61,5 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite-gpu:2.10.0")
     implementation('com.github.bumptech.glide:glide:4.11.0')
 
-    implementation 'com.machinezoo.sourceafis:sourceafis:3.18.1'
+    implementation('com.machinezoo.sourceafis:sourceafis:3.18.1')
 }

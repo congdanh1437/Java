@@ -148,7 +148,7 @@ public class MainActivity extends AppCompatActivity implements Detector.Detector
             @Override
             public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
                 Uri savedUri = outputFileResults.getSavedUri() != null ? outputFileResults.getSavedUri() : Uri.fromFile(photoFile);
-                String msg = "Photo capture succeeded: " + savedUri;
+                String msg = "Photo capture succeeded: ";
                 Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_SHORT).show();
                 Log.d(TAG, msg);
 

@@ -1,6 +1,8 @@
 package com.example.graduation;
 
 import android.Manifest;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -106,9 +108,9 @@ public class ImageDisplayActivity extends AppCompatActivity {
                     Bitmap selectedBitmap = BitmapFactory.decodeFile(selectedImagePath);
                     boolean matchResult = matchFingerprints(selectedBitmap, bitmap);
                     if (matchResult) {
-                        showToast("Fingerprints match!");
+                        showDialog("Fingerprints match!");
                     } else {
-                        showToast("Fingerprints do not match!");
+                        showDialog("Fingerprints do not match!");
                     }
                 }
             } catch (IOException e) {
@@ -144,8 +146,16 @@ public class ImageDisplayActivity extends AppCompatActivity {
         return stream.toByteArray();
     }
 
-    private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    private void showDialog(String message) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setMessage(message)
+                .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int id) {
+                        dialog.dismiss();
+                    }
+                });
+        AlertDialog alert = builder.create();
+        alert.show();
     }
 
     @Override
